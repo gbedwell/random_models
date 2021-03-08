@@ -1,0 +1,205 @@
+---
+title: "Random Model Assessment - MB Fragmentation"
+author: "Greg Bedwell"
+date: "1/25/2021"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/model_validation/")
+```
+
+```{r, results="hide", warning=FALSE}
+require(scales)
+library(cowplot)
+library(minpack.lm)
+library(data.table)
+library(broom)
+library(tidyverse)
+library(rigrag)
+```
+
+
+```{r}
+frag.directory <- paste0(getwd(), "/mb_fragmentation/")
+if (!dir.exists(frag.directory)) { dir.create(frag.directory) }
+
+dataset.directory <- paste0(frag.directory, "datasets/")
+if (!dir.exists(dataset.directory)) { dir.create(dataset.directory) }
+
+figure.directory <- paste0(dataset.directory, "figures/")
+if (!dir.exists(figure.directory)) { dir.create(figure.directory) }
+```
+
+### Assessing the generated models
+
+#### Define the number of files in each dataset
+```{r}
+n.files = 15
+```
+
+#### Import resampled datasets
+```{r}
+temp2 <- list.files(paste0(dataset.directory),
+                    pattern="*_matched.bed",
+                    full.names = TRUE,
+                    recursive = TRUE)
+
+resampled.list = lapply(temp2, fread)
+resampled.list <- Map(as.data.frame, resampled.list)
+resampled <- data.table::rbindlist(resampled.list)
+colnames(resampled) <- c("chromosome","int.start","int.end","int.strand","gene.name",
+                         "gene.start","gene.end","gene.strand","iteration","total.sites")
+
+resampled.unique.genes <- resampled %>% dplyr::group_by(total.sites, iteration, gene.name) %>%
+  dplyr::add_count(gene.name, name = "int.counts") %>%
+  dplyr::arrange(gene.name, total.sites) %>%
+  dplyr::distinct(gene.name, .keep_all=TRUE) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(total.sites, iteration) %>%
+  dplyr::mutate(genic.sites = sum(int.counts)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(frac.int = int.counts/genic.sites) %>%
+  dplyr::mutate(gene.length = (gene.end - gene.start) + 1) %>%
+  dplyr::group_by(gene.name, total.sites) %>%
+  dplyr::add_count(gene.name, name = "unique.ids") %>%
+  dplyr::mutate(no.rep = n.files - unique.ids) %>%
+  dplyr::ungroup()
+```
+
+#### Calculate outliers
+```{r}
+outliers <- rigrag::random_frag_model(df = resampled.unique.genes) %>%
+  dplyr::select(total.sites, iteration, gene.name, genic.sites, frac.int, expected.frac, upper.limit, lower.limit) %>%
+  dplyr::arrange(total.sites, iteration) %>%
+  dplyr::mutate(total.sites.comma = scales::comma(total.sites),
+                total.sites.comma = forcats::as_factor(total.sites.comma),
+                total.sites.comma = forcats::fct_reorder(total.sites.comma, total.sites))
+
+filtered.upper.outliers <-  outliers %>% 
+  dplyr::mutate(conditional=case_when(frac.int > upper.limit ~ "YES",
+                                      frac.int < upper.limit ~ "NO")) %>%
+  dplyr::group_by(iteration, total.sites) %>%
+  dplyr::mutate(n.outliers = sum(conditional == "YES")) %>%
+  dplyr::ungroup() %>%  
+  dplyr::arrange(total.sites, iteration) %>%
+  dplyr::distinct(iteration, total.sites, .keep_all=TRUE) %>%
+  dplyr::mutate(fpr = n.outliers/genic.sites) %>%
+  dplyr::arrange(iteration, total.sites) %>%
+  dplyr::select(iteration, total.sites, total.sites.comma, n.outliers, fpr) %>%
+  dplyr::mutate(outlier.type = c("upper")) %>%
+  dplyr::arrange(total.sites, iteration)
+
+filtered.lower.outliers <-  outliers %>% 
+  dplyr::mutate(conditional=case_when(frac.int < lower.limit ~ "YES",
+                                      frac.int > lower.limit ~ "NO")) %>%
+  dplyr::group_by(iteration, total.sites) %>%
+  dplyr::mutate(n.outliers = sum(conditional == "YES")) %>%
+  dplyr::ungroup() %>%  
+  dplyr::arrange(total.sites, iteration) %>%
+  dplyr::distinct(iteration, total.sites, .keep_all=TRUE) %>%
+  dplyr::mutate(fpr = n.outliers/genic.sites) %>%
+  dplyr::arrange(iteration, total.sites) %>%
+  dplyr::select(iteration, total.sites, total.sites.comma, n.outliers, fpr) %>%
+  dplyr::mutate(outlier.type = c("lower")) %>%
+  dplyr::arrange(total.sites, iteration)
+
+outliers <- rbind(filtered.upper.outliers, filtered.lower.outliers) %>%
+  dplyr::arrange(iteration)
+```
+
+#### FPR plot
+```{r}
+outliers$outlier.type <- factor(outliers$outlier.type, levels=c("upper","lower"))
+
+outlier.plot <- ggplot(outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)), 
+                                     y=fpr, fill=outlier.type)) + 
+  geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
+  geom_point(aes(fill=outlier.type), 
+             position = position_jitterdodge(seed=123), 
+             color="black", shape=21) +  
+  scale_fill_manual("Outlier Type - Random",
+    values = c("navyblue", "darkred"),
+    labels=c(" Upper Outliers", " Lower Outliers"),
+    guide = guide_legend(reverse = FALSE,
+                         title.position = "top",
+                         nrow = 1,
+                         title.hjust=0.5,
+                         "Outlier Type",
+                         override.aes = list(size = 3))) +
+  scale_x_discrete() +
+  scale_y_continuous(limits = c(-0.0001,0.005)) +
+  theme_bw() + theme(legend.title = element_text(size=12),
+                     legend.position="top",
+                     legend.key.size = unit(0.5, "cm"),
+                     legend.key.width = unit(0.5,"cm"),
+                     legend.text = element_text(size=12),
+                     legend.box.margin=margin(-10,-10,-10,-10),
+                     axis.text=element_text(size=14),
+                     axis.title=element_text(size=18)) +
+  labs(y = "False Positive Rate") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+outlier.plot
+```
+
+#### Outlier count plot
+```{r}
+n.outlier.plot <- ggplot(outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)), 
+                                     y=n.outliers, fill=outlier.type)) + 
+  geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
+  geom_point(aes(fill=outlier.type), 
+             position = position_jitterdodge(seed=123), 
+             color="black", shape=21) +  
+  scale_fill_manual("Outlier Type - Random",
+    values = c("navyblue", "darkred"),
+    labels=c(" Upper Outliers", " Lower Outliers"),
+    guide = guide_legend(reverse = FALSE,
+                         title.position = "top",
+                         nrow = 1,
+                         title.hjust=0.5,
+                         "Outlier Type",
+                         override.aes = list(size = 3))) +
+  scale_x_discrete() +
+  scale_y_continuous(limits = c(0,100)) +
+  theme_bw() + theme(legend.title = element_text(size=12),
+                     legend.position="top",
+                     legend.key.size = unit(0.5, "cm"),
+                     legend.key.width = unit(0.5,"cm"),
+                     legend.text = element_text(size=12),
+                     legend.box.margin=margin(-10,-10,-10,-10),
+                     axis.text=element_text(size=14),
+                     axis.title=element_text(size=18)) +
+  labs(y = "Number of Outliers") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+n.outlier.plot
+```
+
+
+```{r}
+save.image(file = paste0(frag.directory, "/mb_model_assessment.RData"), safe = F)
+```
+
+
+```{r}
+rm(list=setdiff(ls(), c("outliers", "frag.directory")))
+
+mb.outliers <- outliers
+
+rm(outliers)
+
+save.image(file = paste0(frag.directory, "/mb_outlier_plot_df.RData"), safe = F)
+```
+
+
+
+
+
+
+
+
+
+
+
+

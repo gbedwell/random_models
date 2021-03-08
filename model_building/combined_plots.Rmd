@@ -1,0 +1,1038 @@
+---
+title: "Combined Global Parameter Plot"
+author: "Greg Bedwell"
+date: "01/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Documents/scripts/bioinformatics/int_sites/int_site_analysis/models/")
+```
+
+```{r, results="hide", warning=FALSE}
+library(scales)
+library(cowplot)
+library(minpack.lm)
+library(data.table)
+library(broom)
+library(tidyverse)
+```
+
+#### Define the directories where figures will be saved
+```{r}
+figure.directory <- "~/Documents/scripts/bioinformatics/int_sites/int_site_analysis/cell_types/figures/"
+if (!dir.exists(figure.directory)) { dir.create(figure.directory) }
+```
+
+#### Import relevant RData files
+```{r}
+load(paste0(getwd(), "/model_files/plots_random_fragmentation.RData"))
+
+load(paste0(getwd(), "/model_files/plots_nasb_fragmentation.RData"))
+
+load(paste0(getwd(), "/model_files/plots_mb_fragmentation.RData"))
+```
+
+
+#### Create random individual fit plots
+
+##### Mean integration frequency fits
+```{r}
+rand.mean.linfit.plot <- ggplot(mean.linfit.df.random) +
+  geom_point(aes(x=gene.length/1E6, y=mean.frac, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color = "red", size=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=18),
+        legend.position="none",
+        strip.text = element_text(size = 12)) +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Mean Fraction of Genic Integration")
+
+#rand.mean.linfit.plot
+```
+
+##### Integration frequency spread
+```{r}
+rand.spread.pfit.plot <- ggplot(spread.pfit.df.random) +
+  geom_point(aes(x=gene.length/1E6, y=corr.sd, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color="red", size=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=(predicted.value + spread.resid.uw)), color="blue", size=0.4) +
+  facet_wrap(~ total.sites, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=18),
+        legend.position="none",
+        strip.text = element_text(size = 12)) +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Integration Frequency Spread")
+
+#rand.spread.pfit.plot
+```
+
+
+#### Create NASB individual fit plots
+
+##### Mean integration frequency fits
+```{r}
+nasb.mean.linfit.plot <- ggplot(mean.linfit.df.nasb) +
+  geom_point(aes(x=gene.length/1E6, y=mean.frac, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color = "red", size=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=18),
+        legend.position="none",
+        strip.text = element_text(size = 12)) +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Mean Fraction of Genic Integration")
+
+#nasb.mean.linfit.plot
+```
+
+##### Integration frequency spread
+```{r}
+nasb.spread.pfit.plot <- ggplot(spread.pfit.df.nasb) +
+  geom_point(aes(x=gene.length/1E6, y=corr.sd, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color="red", size=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=(predicted.value + spread.resid.uw)), color="blue", size=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=18),
+        legend.position="none",
+        strip.text = element_text(size = 12)) +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Integration Frequency Spread")
+
+#nasb.spread.pfit.plot
+```
+
+
+
+#### Create MB individual fit plots
+
+##### Mean integration frequency fits
+```{r}
+mb.mean.linfit.plot <- ggplot(mean.linfit.df.mb) +
+  geom_point(aes(x=gene.length/1E6, y=mean.frac, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color = "red", size=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=18),
+        legend.position="none",
+        strip.text = element_text(size = 12)) +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Mean Fraction of Genic Integration")
+
+#mb.mean.linfit.plot
+```
+
+##### Integration frequency spread
+```{r}
+mb.spread.pfit.plot <- ggplot(spread.pfit.df.mb) +
+  geom_point(aes(x=gene.length/1E6, y=corr.sd, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color="red", size=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=(predicted.value + spread.resid.uw)), color="blue", size=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=18),
+        legend.position="none",
+        strip.text = element_text(size = 12)) +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Integration Frequency Spread")
+
+#mb.spread.pfit.plot
+```
+
+
+#### Create individual fits combined plot
+```{r}
+random.individual.fits.title <- ggdraw() + 
+  draw_label(
+    "Random Fragmentation",
+    fontface = 'bold',
+    size = 16,
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+
+random.individual.fits <- cowplot::plot_grid(rand.mean.linfit.plot, rand.spread.pfit.plot,
+                                             labels = c("A","B"),
+                                             label_size = 16,
+                                             ncol = 2)
+
+random.individual.fits <- plot_grid(
+  random.individual.fits.title, random.individual.fits,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+
+
+
+
+
+
+
+nasb.individual.fits.title <- ggdraw() + 
+  draw_label(
+    "NheI/AvrII/SpeI/BamHI Fragmentation",
+    fontface = 'bold',
+    size = 16,
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+
+nasb.individual.fits <- cowplot::plot_grid(nasb.mean.linfit.plot, nasb.spread.pfit.plot,
+                                           labels = c("C","D"),
+                                           label_size = 16,
+                                           ncol = 2)
+
+nasb.individual.fits <- plot_grid(
+  nasb.individual.fits.title, nasb.individual.fits,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+
+
+
+
+
+
+mb.individual.fits.title <- ggdraw() + 
+  draw_label(
+    "MseI/BglII Fragmentation",
+    fontface = 'bold',
+    size = 16,
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+
+mb.individual.fits <- cowplot::plot_grid(mb.mean.linfit.plot, mb.spread.pfit.plot,
+                                         labels = c("E","F"),
+                                         label_size = 16,
+                                         ncol = 2)
+
+mb.individual.fits <- plot_grid(
+  mb.individual.fits.title, mb.individual.fits,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+
+
+
+
+
+
+combo.individual.fits <- cowplot::plot_grid(random.individual.fits,
+                                            nasb.individual.fits,
+                                            mb.individual.fits,
+                                            nrow = 3)
+
+
+
+ggsave(filename=paste0(figure.directory, "individual_fits_combo.tiff"), plot=combo.individual.fits, height=22,
+       width=16, units="in", device="tiff")
+
+```
+
+
+
+
+#### Create global plots
+
+##### Plot mean slope plot
+```{r}
+mean.linfits.random <- mean.linfits.random %>%
+  dplyr::mutate(sample = "random")
+
+mean.linfits.nasb <- mean.linfits.nasb %>%
+  dplyr::mutate(sample = "nasb")
+
+mean.linfits.mb <- mean.linfits.mb %>%
+  dplyr::mutate(sample = "mb")
+
+slope.pred.random <- slope.pred.random %>%
+  dplyr::mutate(sample = "random")
+
+slope.pred.nasb <- slope.pred.nasb %>%
+  dplyr::mutate(sample = "nasb")
+
+slope.pred.mb <- slope.pred.mb %>%
+  dplyr::mutate(sample = "mb")
+
+
+mean.linfits <- rbind(mean.linfits.random, mean.linfits.nasb, mean.linfits.mb)
+
+slope.pred <- rbind(slope.pred.random, slope.pred.nasb, slope.pred.mb)
+
+mean.linfits$sample <- factor(mean.linfits$sample, levels = c("random","nasb","mb"))
+
+slope.pred$sample <- factor(slope.pred$sample, levels = c("random","nasb","mb"))
+
+
+
+mean.slope.fit.plot <- ggplot(mean.linfits, aes(fill=sample)) +
+  geom_point(aes(x=total.sites/1000, y=mean.slope), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites/1000, y=mean.slope), size=2.5, alpha=0.2) +
+  scale_fill_manual(values = c("darkgreen","darkred","navyblue")) +
+  scale_color_manual(values = c("darkgreen","darkred","navyblue")) +
+  geom_line(data=slope.pred,
+            aes(x=total.sites/1000, 
+                y=slope.pred,
+                color = sample), 
+            size=0.6) +
+  theme_bw() +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(y = "Mean Slope") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#mean.slope.fit.plot
+```
+
+##### Plot mean intercept plot
+```{r}
+mean.int.fit.params.random <- mean.int.fit.params.random %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "random") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+mean.int.fit.params.nasb <- mean.int.fit.params.nasb %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "nasb") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+mean.int.fit.params.mb <- mean.int.fit.params.mb %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "mb") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+mean.int.fit.params <- rbind(mean.int.fit.params.random, mean.int.fit.params.nasb, mean.int.fit.params.mb)
+
+int.pred <- mean.linfits %>%
+  dplyr::inner_join(., mean.int.fit.params, by="sample") %>%
+  dplyr::mutate(int.pred = N*total.sites^a + k) %>%
+  dplyr::select(sample, total.sites, int.pred)
+
+int.pred$sample <- factor(int.pred$sample, levels=c("random","nasb","mb"))
+
+mean.int.fit.plot <- ggplot(mean.linfits, aes(fill=sample)) +
+  geom_point(aes(x=total.sites/1000, y=mean.intercept), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites/1000, y=mean.intercept), size=2.5, alpha=0.2) +
+  scale_fill_manual(values = c("darkgreen","darkred","navyblue")) +
+  scale_color_manual(values = c("darkgreen","darkred","navyblue")) +
+  geom_line(data = int.pred,
+            aes(x=total.sites/1000, 
+                y=int.pred,
+                color = sample), 
+            size=0.6) +
+  theme_bw() +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(y = "Mean Intercept") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#mean.int.fit.plot
+```
+
+
+##### Plot spread N parameter
+```{r}
+spread.pfits.random <- spread.pfits.random %>%
+  dplyr::mutate(sample = "random")
+
+spread.pfits.nasb <- spread.pfits.nasb %>%
+  dplyr::mutate(sample = "nasb")
+
+spread.pfits.mb <- spread.pfits.mb %>%
+  dplyr::mutate(sample = "mb")
+
+spread.pfits <- rbind(spread.pfits.random, spread.pfits.nasb, spread.pfits.mb)
+
+spread.pfits$sample <- factor(spread.pfits$sample, levels = c("random","nasb","mb"))
+
+spread.N.fit.params.random <- spread.N.fit.params.random %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "random") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+spread.N.fit.params.nasb <- spread.N.fit.params.nasb %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "nasb") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+spread.N.fit.params.mb <- spread.N.fit.params.mb %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "mb") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+spread.N.fit.params <- rbind(spread.N.fit.params.random, spread.N.fit.params.nasb, spread.N.fit.params.mb)
+
+spread.N.pred <- spread.pfits %>%
+  dplyr::inner_join(., spread.N.fit.params , by="sample") %>%
+  dplyr::mutate(N.pred = N*total.sites^a + k) %>%
+  dplyr::select(sample, total.sites, N.pred)
+
+spread.N.pred$sample <- factor(spread.N.pred$sample, levels=c("random","nasb","mb"))
+
+spread.N.plot <- ggplot(spread.pfits, aes(fill=sample)) +
+  geom_point(aes(x=total.sites/1000, y=N.spread), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites/1000, y=N.spread), size=2.5, alpha=0.2) +
+  scale_fill_manual(values = c("darkgreen","darkred","navyblue")) +
+  scale_color_manual(values = c("darkgreen","darkred","navyblue")) +
+  geom_line(data = spread.N.pred,
+            aes(x=total.sites/1000, 
+                y=N.pred,
+                color = sample), 
+            size=0.6) +
+  theme_bw() +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(limits = c(0,12E-6)) +
+  labs(y = "Spread N Parameter") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#spread.N.plot
+```
+
+
+##### Plot spread a parameter
+```{r}
+spread.a.pred.random <- spread.a.pred.random %>%
+  dplyr::mutate(sample = "random")
+
+spread.a.pred.nasb <- spread.a.pred.nasb %>%
+  dplyr::mutate(sample = "nasb")
+
+spread.a.pred.mb <- spread.a.pred.mb %>%
+  dplyr::mutate(sample = "mb")
+
+
+spread.a.pred <- rbind(spread.a.pred.random, spread.a.pred.nasb, spread.a.pred.mb)
+
+spread.a.pred$sample <- factor(slope.pred$sample, levels = c("random","nasb","mb"))
+
+
+spread.a.fit.plot <- ggplot(spread.pfits, aes(fill=sample)) +
+  geom_point(aes(x=total.sites/1000, y=a.spread), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites/1000, y=a.spread), size=2.5, alpha=0.2) +
+  scale_fill_manual(values = c("darkgreen","darkred","navyblue")) +
+  scale_color_manual(values = c("darkgreen","darkred","navyblue")) +
+  geom_line(data=spread.a.pred,
+            aes(x=total.sites/1000, 
+                y=spread.a.pred,
+                color = sample), 
+            size=0.6) +
+  theme_bw() +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(limits = c(0.25,0.51),
+                     breaks = seq(0.25,0.5,by=0.05)) +
+  labs(y = "Spread a Parameter") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#spread.a.fit.plot
+```
+
+
+
+##### Plot spread UW fits
+```{r}
+spread.pfit.uw.random <- spread.pfit.uw.random %>%
+  dplyr::mutate(sample = "random")
+
+spread.pfit.uw.nasb <- spread.pfit.uw.nasb %>%
+  dplyr::mutate(sample = "nasb")
+
+spread.pfit.uw.mb <- spread.pfit.uw.mb %>%
+  dplyr::mutate(sample = "mb")
+
+spread.pfit.uw <- rbind(spread.pfit.uw.random, spread.pfit.uw.nasb, spread.pfit.uw.mb)
+
+spread.pfit.uw$sample <- factor(spread.pfit.uw$sample, levels = c("random","nasb","mb"))
+
+resid.uw.params.random <- resid.uw.params.random %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "random") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+resid.uw.params.nasb <- resid.uw.params.nasb %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "nasb") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+resid.uw.params.mb <- resid.uw.params.mb %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "mb") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+resid.uw.params <- rbind(resid.uw.params.random, resid.uw.params.nasb, resid.uw.params.mb)
+
+resid.uw.params$sample <- factor(resid.uw.params$sample, levels=c("random","nasb","mb"))
+
+uw.pred <- spread.pfit.uw %>%
+  dplyr::inner_join(., resid.uw.params , by="sample") %>%
+  dplyr::mutate(uw.pred = N*total.sites^a + k) %>%
+  dplyr::select(sample, total.sites, uw.pred)
+
+uw.pred$sample <- factor(uw.pred$sample, levels=c("random","nasb","mb"))
+
+uw.plot <- ggplot(spread.pfit.uw, aes(fill=sample)) +
+  geom_point(aes(x=total.sites/1000, y=spread.resid.uw), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites/1000, y=spread.resid.uw), size=2.5, alpha=0.2) +
+  scale_fill_manual(values = c("darkgreen","darkred","navyblue")) +
+  scale_color_manual(values = c("darkgreen","darkred","navyblue")) +
+  geom_line(data = uw.pred,
+            aes(x=total.sites/1000, 
+                y=uw.pred,
+                color = sample), 
+            size=0.6) +
+  theme_bw() +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(y = "Spread UW") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#uw.plot
+```
+
+
+
+##### Plot zero points fit
+```{r}
+zero.points.random <- zero.points.random %>%
+  dplyr::mutate(sample = "random")
+
+zero.points.nasb <- zero.points.nasb %>%
+  dplyr::mutate(sample = "nasb")
+
+zero.points.mb <- zero.points.mb %>%
+  dplyr::mutate(sample = "mb")
+
+zero.points <- rbind(zero.points.random, zero.points.nasb, zero.points.mb)
+
+zero.points$sample <- factor(zero.points$sample, levels = c("random","nasb","mb"))
+
+zero.fit.params.random <- zero.fit.params.random %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "random") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+zero.fit.params.nasb <- zero.fit.params.nasb %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "nasb") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+zero.fit.params.mb <- zero.fit.params.mb %>%
+  as_data_frame() %>%
+  dplyr::mutate(sample = "mb") %>%
+  tibble::add_column(parameter = c("N","a","k")) %>%
+  dplyr::select(sample, parameter, Estimate) %>%
+  tidyr::pivot_wider(names_from = parameter, values_from = Estimate)
+
+zero.fit.params <- rbind(zero.fit.params.random, zero.fit.params.nasb, zero.fit.params.mb)
+
+zero.fit.params$sample <- factor(zero.fit.params$sample, levels=c("random","nasb","mb"))
+
+zero.pred <- zero.points %>%
+  dplyr::inner_join(., zero.fit.params , by="sample") %>%
+  dplyr::mutate(zero.pred = N*total.sites^a + k) %>%
+  dplyr::select(sample, total.sites, zero.pred)
+
+zero.pred$sample <- factor(zero.pred$sample, levels=c("random","nasb","mb"))
+
+zeroes.plot <- ggplot(zero.points, aes(fill=sample)) +
+  geom_point(aes(x=total.sites/1000, y=x.uw/1000000), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites/1000, y=x.uw/1000000), size=2.5, alpha=0.2) +
+  scale_fill_manual(values = c("darkgreen","darkred","navyblue"),
+                    labels = c("Random","NheI/AvrII/SpeI/BamHI","MseI/BglII")) +
+  scale_color_manual(values = c("darkgreen","darkred","navyblue")) +
+  geom_line(data = zero.pred,
+            aes(x=total.sites/1000, 
+                y=zero.pred/1000000,
+                color = sample), 
+            size=0.6,
+            show.legend = FALSE) +
+  theme_bw() +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(limits = c(0,0.4)) +
+  labs(y = "Zero Point (Mbp)") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#zeroes.plot
+```
+
+
+```{r}
+legend <- get_legend(
+  zeroes.plot + 
+    guides(fill = guide_legend(nrow = 1,
+                               "Fragmentation Method",
+                               title.position = "top",
+                               title.hjust=0.5,
+                               override.aes = list(size = 3))) +
+    theme(legend.position = "top",
+          legend.title=element_text(size=12),
+          legend.text=element_text(size=12))) 
+
+
+row1 <- cowplot::plot_grid(uw.plot, zeroes.plot, mean.slope.fit.plot,
+                           labels = c("A","B","C"),
+                           label_size = 16,
+                           ncol = 3)
+
+row2 <- cowplot::plot_grid(mean.int.fit.plot, spread.N.plot, spread.a.fit.plot,
+                           labels = c("D","E","F"),
+                           label_size = 16,
+                           ncol = 3)
+
+
+global.fits <- plot_grid(legend, row1, row2,
+                         ncol = 1, 
+                         rel_heights = c(0.2,1,1))
+
+
+ggsave(filename=paste0(figure.directory, "global_fits_combo.tiff"), plot=global.fits, height=8,
+       width=14, units="in", device="tiff")
+```
+
+
+
+#### Plot model outlier plots
+
+##### Import relavent dataframes
+```{r}
+load(paste0(getwd(), "/model_files/random_outlier_plot_df.RData"))
+
+load(paste0(getwd(), "/model_files/nasb_outlier_plot_df.RData"))
+
+load(paste0(getwd(), "/model_files/mb_outlier_plot_df.RData"))
+
+rm(frag.directory)
+```
+
+
+##### Combine dataframes
+```{r}
+random.outliers <- random.outliers %>%
+  dplyr::mutate(sample = "random")
+
+nasb.outliers <- nasb.outliers %>%
+  dplyr::mutate(sample = "nasb")
+
+mb.outliers <- mb.outliers %>%
+  dplyr::mutate(sample = "mb")
+
+#outliers <- rbind(random.outliers, nasb.outliers, mb.outliers)
+```
+
+
+##### Plot random FPR
+```{r}
+random.outlier.plot <- ggplot(random.outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)), 
+                                                   y=fpr, fill=outlier.type)) + 
+  geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
+  geom_point(aes(fill=outlier.type), 
+             position = position_jitterdodge(seed=123), 
+             color="black", shape=21) +  
+  scale_fill_manual("Outlier Type - Random",
+    values = c("navyblue", "darkred"),
+    labels=c(" Upper Outliers", " Lower Outliers"),
+    guide = guide_legend(reverse = FALSE,
+                         title.position = "top",
+                         nrow = 1,
+                         title.hjust=0.5,
+                         "Outlier Type",
+                         override.aes = list(size = 3))) +
+  scale_x_discrete() +
+  scale_y_continuous(limits = c(-0.0001,0.005)) +
+  theme_bw() + theme(legend.title = element_text(size=12),
+                     legend.position="none",
+                     legend.key.size = unit(0.5, "cm"),
+                     legend.key.width = unit(0.5,"cm"),
+                     legend.text = element_text(size=12),
+                     legend.box.margin=margin(-10,-10,-10,-10),
+                     axis.text=element_text(size=14),
+                     axis.title=element_text(size=18)) +
+  labs(y = "False Positive Rate") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#random.outlier.plot
+```
+
+##### Plot random outlier number
+```{r}
+n.random.outlier.plot <- ggplot(random.outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)),
+                                                     y=n.outliers, fill=outlier.type)) + 
+  geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
+  geom_point(aes(fill=outlier.type), 
+             position = position_jitterdodge(seed=123), 
+             color="black", shape=21) +  
+  scale_fill_manual("Outlier Type - Random",
+    values = c("navyblue", "darkred"),
+    labels=c(" Upper Outliers", " Lower Outliers"),
+    guide = guide_legend(reverse = FALSE,
+                         title.position = "top",
+                         nrow = 1,
+                         title.hjust=0.5,
+                         "Outlier Type",
+                         override.aes = list(size = 3))) +
+  scale_x_discrete() +
+  scale_y_continuous(limits = c(0,100)) +
+  theme_bw() + theme(legend.title = element_text(size=12),
+                     legend.position="none",
+                     legend.key.size = unit(0.5, "cm"),
+                     legend.key.width = unit(0.5,"cm"),
+                     legend.text = element_text(size=12),
+                     legend.box.margin=margin(-10,-10,-10,-10),
+                     axis.text=element_text(size=14),
+                     axis.title=element_text(size=18)) +
+  labs(y = "Number of Outliers") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#n.random.outlier.plot
+```
+
+
+
+
+##### Plot NASB FPR
+```{r}
+nasb.outlier.plot <- ggplot(nasb.outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)),
+                                               y=fpr, fill=outlier.type)) + 
+  geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
+  geom_point(aes(fill=outlier.type), 
+             position = position_jitterdodge(seed=123), 
+             color="black", shape=21) +  
+  scale_fill_manual("Outlier Type - Random",
+    values = c("navyblue", "darkred"),
+    labels=c(" Upper Outliers", " Lower Outliers"),
+    guide = guide_legend(reverse = FALSE,
+                         title.position = "top",
+                         nrow = 1,
+                         title.hjust=0.5,
+                         "Outlier Type",
+                         override.aes = list(size = 3))) +
+  scale_x_discrete() +
+  scale_y_continuous(limits = c(-0.0001,0.005)) +
+  theme_bw() + theme(legend.title = element_text(size=12),
+                     legend.position="none",
+                     legend.key.size = unit(0.5, "cm"),
+                     legend.key.width = unit(0.5,"cm"),
+                     legend.text = element_text(size=12),
+                     legend.box.margin=margin(-10,-10,-10,-10),
+                     axis.text=element_text(size=14),
+                     axis.title=element_text(size=18)) +
+  labs(y = "False Positive Rate") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#nasb.outlier.plot
+```
+
+##### Plot NASB outlier number
+```{r}
+n.nasb.outlier.plot <- ggplot(random.outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)),
+                                                     y=n.outliers, fill=outlier.type)) + 
+  geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
+  geom_point(aes(fill=outlier.type), 
+             position = position_jitterdodge(seed=123), 
+             color="black", shape=21) +  
+  scale_fill_manual("Outlier Type - Random",
+    values = c("navyblue", "darkred"),
+    labels=c(" Upper Outliers", " Lower Outliers"),
+    guide = guide_legend(reverse = FALSE,
+                         title.position = "top",
+                         nrow = 1,
+                         title.hjust=0.5,
+                         "Outlier Type",
+                         override.aes = list(size = 3))) +
+  scale_x_discrete() +
+  scale_y_continuous(limits = c(0,100)) +
+  theme_bw() + theme(legend.title = element_text(size=12),
+                     legend.position="none",
+                     legend.key.size = unit(0.5, "cm"),
+                     legend.key.width = unit(0.5,"cm"),
+                     legend.text = element_text(size=12),
+                     legend.box.margin=margin(-10,-10,-10,-10),
+                     axis.text=element_text(size=14),
+                     axis.title=element_text(size=18)) +
+  labs(y = "Number of Outliers") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#n.nasb.outlier.plot
+```
+
+
+
+
+##### Plot MB FPR
+```{r}
+mb.outlier.plot <- ggplot(mb.outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)),
+                                           y=fpr, fill=outlier.type)) + 
+  geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
+  geom_point(aes(fill=outlier.type), 
+             position = position_jitterdodge(seed=123), 
+             color="black", shape=21) +  
+  scale_fill_manual("Outlier Type - Random",
+    values = c("navyblue", "darkred"),
+    labels=c(" Upper Outliers", " Lower Outliers"),
+    guide = guide_legend(reverse = FALSE,
+                         title.position = "top",
+                         nrow = 1,
+                         title.hjust=0.5,
+                         "Outlier Type",
+                         override.aes = list(size = 3))) +
+  scale_x_discrete() +
+  scale_y_continuous(limits = c(-0.0001,0.005)) +
+  theme_bw() + theme(legend.title = element_text(size=12),
+                     legend.position="none",
+                     legend.key.size = unit(0.5, "cm"),
+                     legend.key.width = unit(0.5,"cm"),
+                     legend.text = element_text(size=12),
+                     legend.box.margin=margin(-10,-10,-10,-10),
+                     axis.text=element_text(size=14),
+                     axis.title=element_text(size=18)) +
+  labs(y = "False Positive Rate") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#mb.outlier.plot
+```
+
+##### Plot MB outlier number
+```{r}
+n.mb.outlier.plot <- ggplot(mb.outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)),
+                                             y=n.outliers, fill=outlier.type)) + 
+  geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
+  geom_point(aes(fill=outlier.type), 
+             position = position_jitterdodge(seed=123), 
+             color="black", shape=21) +  
+  scale_fill_manual("Outlier Type - Random",
+    values = c("navyblue", "darkred"),
+    labels=c(" Upper Outliers", " Lower Outliers"),
+    guide = guide_legend(reverse = FALSE,
+                         title.position = "top",
+                         nrow = 1,
+                         title.hjust=0.5,
+                         "Outlier Type",
+                         override.aes = list(size = 3))) +
+  scale_x_discrete() +
+  scale_y_continuous(limits = c(0,100)) +
+  theme_bw() + theme(legend.title = element_text(size=12),
+                     legend.position="none",
+                     legend.key.size = unit(0.5, "cm"),
+                     legend.key.width = unit(0.5,"cm"),
+                     legend.text = element_text(size=12),
+                     legend.box.margin=margin(-10,-10,-10,-10),
+                     axis.text=element_text(size=14),
+                     axis.title=element_text(size=18)) +
+  labs(y = "Number of Outliers") +
+  xlab(expression(paste("Total Sites x ", 10^3)))
+
+#n.mb.outlier.plot
+```
+
+
+
+##### Plot combined plots
+```{r}
+random.outliers.title <- ggdraw() + 
+  draw_label(
+    "Random Fragmentation",
+    fontface = 'bold',
+    size = 16,
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+
+random.outliers.combo <- cowplot::plot_grid(random.outlier.plot, n.random.outlier.plot,
+                                            labels = c("A","B"),
+                                            label_size = 16,
+                                            ncol = 2)
+
+random.outliers.combo <- plot_grid(
+  random.outliers.title, random.outliers.combo,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+
+
+
+
+
+nasb.outliers.title <- ggdraw() + 
+  draw_label(
+    "NheI/AvrII/SpeI/BamHI Fragmentation",
+    fontface = 'bold',
+    size = 16,
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+
+nasb.outliers.combo <- cowplot::plot_grid(nasb.outlier.plot, n.nasb.outlier.plot,
+                                            labels = c("C","D"),
+                                            label_size = 16,
+                                            ncol = 2)
+
+nasb.outliers.combo <- plot_grid(
+  nasb.outliers.title, nasb.outliers.combo,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+
+
+
+
+
+
+
+mb.outliers.title <- ggdraw() + 
+  draw_label(
+    "MseI/BglII Fragmentation",
+    fontface = 'bold',
+    size = 16,
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+
+mb.outliers.combo <- cowplot::plot_grid(mb.outlier.plot, n.mb.outlier.plot,
+                                            labels = c("E","F"),
+                                            label_size = 16,
+                                            ncol = 2)
+
+mb.outliers.combo <- plot_grid(
+  mb.outliers.title, mb.outliers.combo,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+
+
+
+
+outlier.legend <- get_legend(
+  n.mb.outlier.plot + 
+    guides(fill = guide_legend(nrow = 1,
+                               "Outlier Type",
+                               title.position = "top",
+                               title.hjust=0.5,
+                               override.aes = list(size = 6))) +
+    theme(legend.position = "top",
+          legend.title=element_text(size=20),
+          legend.text=element_text(size=20))) 
+
+
+
+combo.outlier.fits <- cowplot::plot_grid(outlier.legend,
+                                         random.outliers.combo,
+                                         nasb.outliers.combo,
+                                         mb.outliers.combo,
+                                         nrow = 4,
+                                         ncol=1,
+                                         rel_heights = c(0.2,1,1,1))
+
+
+
+
+
+
+ggsave(filename=paste0(figure.directory, "outlifer_fits_combo.tiff"), plot=combo.outlier.fits, height=16,
+       width=22, units="in", device="tiff")
+```
+
+
+
+
+
+
+
+
+```{r}
+save.image(file = paste0("~/Documents/scripts/bioinformatics/int_sites/int_site_analysis/models/model_files",
+                         "/combined_plots.RData"), safe = F)
+```
+
+
+
+
+
+
+
+
+
+
+

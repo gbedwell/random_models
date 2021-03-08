@@ -1,0 +1,817 @@
+---
+title: "Model Generation for Random HIV-1 Integration"
+author: "Greg Bedwell"
+date: "12/21/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Documents/scripts/bioinformatics/int_sites/int_site_analysis/models/")
+```
+
+
+#### Define relevant directories to generalize downstream chunks
+```{r}
+frag.directory <- paste0(getwd(), "/model_files/")
+if (!dir.exists(frag.directory)) { dir.create(frag.directory) }
+
+#dataset.directory <- paste0(frag.directory, "datasets/")
+#if (!dir.exists(frag.directory)) { dir.create(frag.directory) }
+
+#figure.directory <- paste0(dataset.directory, "figures/")
+#if (!dir.exists(figure.directory)) { dir.create(figure.directory) }
+```
+
+
+#### Define the total number of data files in each dataset
+```{r}
+n.files = 10
+```
+
+
+```{r, results="hide", echo=FALSE, warning=FALSE}
+library(scales)
+library(cowplot)
+library(minpack.lm)
+library(data.table)
+library(broom)
+library(tidyverse)
+```
+
+
+### Calculating the summary statistics for each random integration site dataset
+#### Import all of the random integration BED files.
++ Import all of the gene annotation matched BED files for each random integration site dataset.
+```{r echo=FALSE}
+temp <- list.files(dataset.directory,
+                   pattern="*_matched.bed",
+                   full.names = TRUE,
+                   recursive = TRUE)
+
+genic.int.list = lapply(temp, fread)
+genic.int.list <- Map(as.data.frame, genic.int.list)
+genic.int <- data.table::rbindlist(genic.int.list)
+colnames(genic.int) <- c("chromosome","int.start","int.end","int.strand","gene.name",
+                         "gene.start","gene.end","gene.strand","iteration","total.sites")
+```
+
+#### Analyze fraction of genic integration
++ Calculate the fraction of total integration sites that overlapped with annotated genes. 
++ Used a curated GENCODE gene annotation set
+  + Includes all protein-coding, lincRNA, snoRNA, snRNA, rRNA, Ig variable chain, and TcR genes
+
+```{r}
+frac.genic.int <- genic.int %>% 
+  dplyr::group_by(total.sites, iteration) %>%
+  dplyr::add_count(iteration, name = "genic.sites") %>%
+  dplyr::mutate(genic.frac = genic.sites/total.sites) %>%
+  dplyr::select(iteration, total.sites, genic.sites, genic.frac) %>%
+  dplyr::distinct(.keep_all = TRUE) %>%
+  dplyr::ungroup()
+
+summary.genic.frac <- frac.genic.int %>% 
+  dplyr::group_by(total.sites) %>%
+  dplyr::summarise(frac.mean = mean(genic.frac), frac.sd = sd(genic.frac)) %>%
+  dplyr::ungroup()
+```
+
+#### Count the total number of integration sites for each unique gene in each file.
++ Summarize the number of integration events and the integration frequency into each gene in each iteration of each dataset
+  + Iteration-level summary
+
+```{r}
+unique.genes <- genic.int %>% 
+  dplyr::group_by(total.sites, iteration, gene.name) %>%
+  dplyr::add_count(gene.name, name = "int.counts") %>%
+  dplyr::arrange(gene.name, total.sites) %>%
+  dplyr::distinct(gene.name, .keep_all=TRUE) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(total.sites, iteration) %>%
+  dplyr::mutate(genic.sites = sum(int.counts)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(frac.int = int.counts/genic.sites,
+                gene.length = (gene.end - gene.start) + 1) %>%
+  dplyr::group_by(gene.name, total.sites) %>%
+  dplyr::add_count(gene.name, name = "unique.ids") %>%
+  dplyr::mutate(no.rep = n.files - unique.ids) %>%
+  dplyr::ungroup()
+```
+
+
+#### Calculate the summary statistics for individual genes in each dataset
++ Calculate the mean values for individual genes in each dataset and the corresponding standard deviations
+  + Dataset-level summary (more big-picture)
++ Not all genes will be present in every iteration. 
+  +To calculate accurate mean and standard deviation values these zeroes must be accounted for.
+
+```{r}
+scratch.uniq.df <- unique.genes %>%
+  dplyr::group_by(gene.name, total.sites) %>%
+  dplyr::select(c(gene.name, total.sites, genic.sites, int.counts, frac.int, gene.length, unique.ids, no.rep)) %>%
+  dplyr::mutate(mean.int = sum(int.counts)/n.files,
+                part.sd.int = (int.counts - mean.int)^2,
+                max.int = max(int.counts),
+                min.int = case_when(unique.ids == n.files ~ as.numeric(min(int.counts)),
+                                    unique.ids < n.files ~ as.numeric(0)),
+                temp.int.range = max(int.counts) - min(int.counts),
+                range.int = case_when(unique.ids < n.files ~ as.numeric(max(int.counts)),
+                                      unique.ids == n.files ~ as.numeric(temp.int.range)),
+                part.sd.int.sum = sum(part.sd.int)) %>%
+  dplyr::mutate(mean.frac = sum(frac.int)/n.files,
+                part.sd.frac = (frac.int - mean.frac)^2,
+                max.frac = max(frac.int),
+                min.frac = case_when(unique.ids == n.files ~ as.numeric(min(frac.int)),
+                                     unique.ids < n.files ~ as.numeric(0)),
+                temp.range.frac = max(frac.int) - min(frac.int),
+                range.frac = case_when(unique.ids < n.files ~ as.numeric(max(frac.int)),
+                                       unique.ids == n.files ~ as.numeric(temp.range.frac)),
+                part.sd.frac.sum = sum(part.sd.frac)) %>%
+  dplyr::distinct(gene.name, .keep_all = TRUE) %>%
+  dplyr::mutate(other.sd.int = no.rep*((0 - mean.int)^2),
+                stdev.int = sqrt((part.sd.int.sum + other.sd.int)/(n.files-1))) %>%
+  dplyr::mutate(other.sd.frac = no.rep*((0 - mean.frac)^2),
+                stdev.frac = sqrt((part.sd.frac.sum + other.sd.frac)/(n.files-1))) %>%
+  dplyr::select(-c(part.sd.int, part.sd.int.sum, other.sd.int, part.sd.frac, part.sd.frac.sum, other.sd.frac,
+                   temp.int.range, temp.range.frac)) %>%
+  dplyr::ungroup()
+
+#rm(scratch.uniq.df)
+```
+
+
+#### Create a master summarized dataframe
+```{r}
+collapsed.genes <- inner_join(unique.genes, 
+                              scratch.uniq.df, 
+                              by = c("gene.name","total.sites","gene.length", "genic.sites",
+                                     "int.counts","frac.int", "no.rep", "unique.ids")) %>%
+  dplyr::arrange(total.sites, gene.name) %>%
+  dplyr::select(-c(iteration, genic.sites, frac.int, int.counts)) %>%
+  dplyr::mutate(total.sites.comma = scales::comma(total.sites),
+                total.sites.comma = forcats::as_factor(total.sites.comma),
+                total.sites.comma = forcats::fct_reorder(total.sites.comma, total.sites))
+```
+
+
+
+#### Kill switch to remove all downstream dataframes
++ The chunks above are too processor-intensive to run on a laptop
++ This chunk keeps the out of these processor-intensive chunks but allows for editing and testing of the downstream chunks
+  + All downstream chunks can be run on a laptop
+  
+```{r, eval=FALSE}
+rm(list=setdiff(ls(), c("collapsed.genes", "scratch.uniq.df", "unique.genes", "summary.genic.frac", 
+                        "frac.genic.int", "genic.int", "genic.int.list", "temp", "n.files", "frag.directory")))
+```
+
+
+### Calculate model parameters
+
+#### Fit the mean integration frequency per gene vs. gene length
++ For random integration, integration frequency should increase linearly with gene length
++ For each dataset, fit mean integration frequency vs. gene length to a linear function
++ Calculate predicted and residual values for each gene.
++ Create plot containing the raw data and the predicted values (best fit line) for each dataset.
+
+```{r, warning=FALSE}
+mean.linfits <- collapsed.genes %>%
+  dplyr::group_by(total.sites) %>%
+  tidyr::nest() %>%
+  dplyr::mutate(fit.mean = purrr::map(data, ~lm(.x$mean.frac ~ .x$gene.length)),
+                tidied = map(fit.mean, tidy)) %>%
+  tidyr::unnest(tidied, .drop = TRUE) %>%
+  dplyr::select(c(total.sites, term, estimate)) %>%
+  tidyr::spread(term, estimate)
+colnames(mean.linfits) <- c("total.sites","mean.slope","mean.intercept")
+
+mean.linfit.df <- dplyr::full_join(collapsed.genes, mean.linfits, by=c("total.sites")) %>%
+  dplyr::select(total.sites, gene.name, gene.length, mean.frac, mean.intercept, mean.slope, total.sites.comma) %>%
+  dplyr::mutate(predicted.value = mean.slope*gene.length+mean.intercept,
+                residual.value = mean.frac - predicted.value)
+
+
+mean.linfit.plot <- ggplot(mean.linfit.df) +
+  geom_point(aes(x=gene.length/1E6, y=mean.frac, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color = "red", size=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Mean Fraction of Genic Integration")
+
+#mean.linfit.plot
+```
+
+#### Plot the mean slope vs. total sample size
++ Fit the data to a function that describes it well
+  + This is entirely empirical. 
+    + The goal is not to have a strong theoretical foundation, but to describe the functional trend.
+  + Fit using nlsLM package in minpack.lm
+    + Employs the Levenberg-Marquardt algorithm for fitting
++ Most trends appear to be well-described by single power laws (y=Nx^a + k)
++ Global a parameter fits and global mean frequency slope fits are best described by a piecewise broken power law
+  + Fit the log-log transformed data to two linear equations
+  + Scale the function with the Heaviside (unit step) function (H(x) = 1 if x>0; H = 0 if x ≤ 0)
+
+```{r}
+H <- function(x) as.numeric(x>0)
+
+slope.fit.temp <- nlsLM(log(mean.slope) ~ b0+b1*(log(total.sites)-c)*H(c-log(total.sites))+b2*(log(total.sites)-c), 
+                        data=mean.linfits,
+                        start = list(b0 = 0,
+                                     b1 = 0.1,
+                                     b2 = 0.1,
+                                     c = 10),
+                        control = list(maxiter = 500))
+
+mean.slope.fit.params <- summary(slope.fit.temp)$coefficients
+
+rm(slope.fit.temp)
+
+slope.pred <- mean.linfits %>%
+  dplyr::select(-c(mean.intercept)) %>%
+  dplyr::mutate(slope.pred = case_when(total.sites < 
+                                         exp(mean.slope.fit.params[4,1]) ~ 
+                                         exp(mean.slope.fit.params[1,1] - 
+                                               mean.slope.fit.params[4,1]*mean.slope.fit.params[2,1])*
+                                         total.sites^mean.slope.fit.params[2,1],
+                                       
+                                       total.sites >= exp(mean.slope.fit.params[4,1]) ~
+                                         exp(mean.slope.fit.params[1,1] - 
+                                               mean.slope.fit.params[4,1]*mean.slope.fit.params[3,1])*
+                                         total.sites^mean.slope.fit.params[3,1]))
+
+
+
+mean.slope.fit.plot <- ggplot(mean.linfits) +
+  geom_point(aes(x=total.sites, y=mean.slope), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites, y=mean.slope, fill="black"), size=2.5, alpha=0.4) +
+  geom_line(data=slope.pred,
+            aes(x=total.sites, 
+                y=(slope.pred)), 
+            color = "red", size=0.4) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total Sites", y = "Mean Slope")
+
+#mean.slope.fit.plot
+```
+
+
+#### Plot the mean intercept vs. total sample size
++ Fit to a single power law
++ Initial parameter estimates for this fit were hard to guess
+  + Function throws singularity errors
+  + Based initial parameters on previous fits of the same data to achieve optimization
+
+```{r}
+int.fit.temp <- summary(nlsLM(mean.intercept ~ (N*total.sites^a) + k,
+      data = mean.linfits,
+      start = list(N = 5,
+                   a = -1,
+                   k = 5E-7),
+      control = list(maxiter = 500)))
+
+mean.int.fit.params <- int.fit.temp$coefficients
+
+rm(int.fit.temp)
+
+mean.int.fit.plot <- ggplot(mean.linfits) +
+  geom_point(aes(x=total.sites, y=mean.intercept), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites, y=mean.intercept, fill="black"), size=2.5, alpha=0.4) +
+  geom_line(aes(x=total.sites, 
+                y=(mean.int.fit.params[1,1]*total.sites^mean.int.fit.params[2,1]) + mean.int.fit.params[3,1]), 
+            color = "red", size=0.4) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total Sites", y = "Mean Intercept")
+
+#mean.int.fit.plot
+```
+
+
+
+#### Fit the standard deviation of integration frequency per gene vs. gene length
++ Fit the standard deviation of integration frequency per gene to a single power law
+  + Judged to be a power law empirically (log-log plot showed apparent linearity)
++ Create plot containing the raw data and the predicted values (best fit curve) for each dataset.
++ The k parameter is included as a translation factor
+
+```{r}
+sd.pfits <- collapsed.genes %>%
+  dplyr::group_by(total.sites) %>%
+  tidyr::nest() %>%
+  dplyr::mutate(fit.sd = purrr::map(data,
+                                      ~nlsLM(stdev.frac ~ N*gene.length^a,
+                                             data = .,
+                                             start = list(N = min(collapsed.genes$stdev.frac),
+                                                          a = unname(coef(lm(log(stdev.frac) ~ log(gene.length),
+                                                                             data=collapsed.genes))[2])),
+                                             control = list(maxiter = 500))),
+                tidied = map(fit.sd, tidy)) %>%
+  tidyr::unnest(tidied, .drop = TRUE) %>%
+  dplyr::select(c(total.sites, term, estimate)) %>%
+  tidyr::spread(term, estimate)
+colnames(sd.pfits) <- c("total.sites","a.sd","N.sd")
+
+sd.pfit.df <- dplyr::full_join(collapsed.genes, sd.pfits, by=c("total.sites")) %>%
+  dplyr::select(total.sites, gene.name, gene.length, stdev.frac, N.sd, a.sd, total.sites.comma) %>%
+  dplyr::mutate(predicted.value = N.sd*gene.length^a.sd,
+                residual.value = stdev.frac - predicted.value)
+
+sd.pfit.plot <- ggplot(sd.pfit.df) +
+  geom_point(aes(x=gene.length/1E6, y=stdev.frac, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color = "red", size=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Standard Deviation")
+
+#sd.pfit.plot
+```
+
+
+#### Plot N vs. total sample size
++ There are two parameters in a simple power law, N (the amplitude) and a (the exponent)
+  + k parameter included for consistency throughout the script (see above)
++ Plot these parameters globally like the slope and intercept for the mean integration frequency above.
+
+```{r}
+N.fit.temp <- summary(nlsLM(N.sd ~ (N*total.sites^a) + k,
+      data = sd.pfits,
+      start = list(N = max(sd.pfits$N.sd),
+                   a = unname(coef(lm(log(N.sd) ~ log(total.sites), data=sd.pfits))[2]),
+                   k = 0),
+      control = list(maxiter = 500)))
+
+sd.N.fit.params <- N.fit.temp$coefficients
+
+rm(N.fit.temp)
+
+sd.N.fit.plot <- ggplot(sd.pfits) +
+  geom_point(aes(x=total.sites, y=N.sd), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites, y=N.sd, fill="black"), size=2.5, alpha=0.4) +
+  geom_line(aes(x=total.sites, 
+                y=(sd.N.fit.params[1,1]*total.sites^sd.N.fit.params[2,1]) + sd.N.fit.params[3,1]), 
+            color = "red", size=0.4) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total Sites", y = "SD N parameter")
+
+#sd.N.fit.plot
+```
+
+
+#### Plot a vs. total sample size
++ The shape of the a parameter appears similar to the shape of the slope parameter for the mean int frequency
++ Fit similarly - piecewise combination of two power laws
+
+```{r}
+a.fit.temp <- nlsLM(log(a.sd) ~ b0+b1*(log(total.sites)-c)*H(c-log(total.sites))+b2*(log(total.sites)-c), 
+                        data=sd.pfits,
+                        start = list(b0 = 0,
+                                     b1 = 0.1,
+                                     b2 = 0.1,
+                                     c = 10),
+                        control = list(maxiter = 500))
+
+sd.a.fit.params <- summary(a.fit.temp)$coefficients
+
+rm(a.fit.temp)
+
+sd.a.pred <- sd.pfits %>%
+  dplyr::select(-c(N.sd)) %>%
+  dplyr::mutate(a.pred = case_when(total.sites < 
+                                         exp(sd.a.fit.params[4,1]) ~ 
+                                         exp(sd.a.fit.params[1,1] - 
+                                               sd.a.fit.params[4,1]*sd.a.fit.params[2,1])*
+                                         total.sites^sd.a.fit.params[2,1],
+                                       
+                                       total.sites >= exp(sd.a.fit.params[4,1]) ~
+                                         exp(sd.a.fit.params[1,1] - 
+                                               sd.a.fit.params[4,1]*sd.a.fit.params[3,1])*
+                                         total.sites^sd.a.fit.params[3,1]))
+
+sd.a.fit.plot <- ggplot(sd.pfits) +
+  geom_point(aes(x=total.sites, y=a.sd), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites, y=a.sd, fill="black"), size=2.5, alpha=0.4) +
+  geom_line(data=sd.a.pred,
+            aes(x=total.sites, 
+                y=(a.pred)), 
+            color = "red", size=0.4) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total Sites", y = "SD a parameter")
+
+#sd.a.fit.plot
+```
+
+
+#### Estimate the spread above and below the mean
+#### Begin analyzing the magnitude of spread on either side of the mean integration frequency.
++ Calculate the range of values above and below the expected value for each gene in each dataset
+
+```{r}
+range.analysis <- unique.genes %>% 
+  dplyr::inner_join(., mean.linfits, by = "total.sites") %>%
+  dplyr::inner_join(., sd.pfits, by = "total.sites") %>%
+  dplyr::mutate(gene.length = gene.end - gene.start + 1,
+                expected.frac = gene.length*mean.slope + mean.intercept,
+                expected.sd = N.sd*gene.length^a.sd,
+                range.frac = frac.int-expected.frac,
+                total.sites.comma = scales::comma(total.sites),
+                total.sites.comma = forcats::as_factor(total.sites.comma),
+                total.sites.comma = forcats::fct_reorder(total.sites.comma, total.sites))
+```
+
+#### Estimate the spread for each random integration site dataset
++ The upper spread is the most faithful representation of true spread about the mean value.
++ The lower spread is heavily skewed due to the absolute lower limit of 0 integration events/frequency
+
++ Express the spread above the mean as a ratio of the expected standard deviation
++ Grab the maximum ratio for each gene in each dataset and calculate a "corrected" SD
+  + The standard deviation for each gene in each dataset scaled according to the maximum ratio
+
+```{r}
+spread.range <- range.analysis %>%
+#  dplyr::filter(range.frac >= 0) %>%
+  dplyr::mutate(ratio = range.frac/expected.sd) %>%
+  dplyr::group_by(gene.name, total.sites) %>%
+  dplyr::mutate(max = max(ratio)) %>%
+  dplyr::distinct(gene.name, .keep_all=TRUE) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(gene.length, total.sites) %>%
+  dplyr::mutate(corr.sd = expected.sd*max)
+
+
+spread.pfits <- spread.range %>%
+  dplyr::group_by(total.sites) %>%
+  tidyr::nest() %>%
+  dplyr::mutate(fit.corr.sd =
+                  purrr::map(data,
+                             ~nlsLM(corr.sd ~ N*gene.length^a,
+                                    data = .,
+                                    start = list(N = min(spread.range$corr.sd),
+                                                 a = unname(coef(lm(log(corr.sd) ~ log(gene.length),
+                                                                    data=spread.range))[2])),
+                                    control = list(maxiter = 1000))),
+                tidied = map(fit.corr.sd, tidy)) %>%
+  tidyr::unnest(tidied, .drop = TRUE) %>%
+  dplyr::select(c(total.sites, term, estimate)) %>%
+  tidyr::spread(term, estimate)
+colnames(spread.pfits) <- c("total.sites","a.spread","N.spread")
+
+
+spread.pfit.df <- dplyr::full_join(spread.range, spread.pfits, by=c("total.sites")) %>%
+  dplyr::select(total.sites, gene.name, gene.length, corr.sd, N.spread, a.spread, total.sites.comma) %>%
+  dplyr::mutate(predicted.value = N.spread*gene.length^a.spread,
+                residual.value = corr.sd - predicted.value) %>%
+  dplyr::group_by(total.sites) %>%
+  dplyr::add_count(total.sites, name = "number")
+
+
+spread.pfit.plot <- ggplot(spread.pfit.df) +
+  geom_point(aes(x=gene.length/1E6, y=corr.sd, fill="black"), alpha=0.4) +
+  geom_line(aes(x=gene.length/1E6, y=predicted.value), color="red", size=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  labs(x = "Gene Length (Mbp)", y = "Upper Spread")
+
+#spread.pfit.plot
+```
+
+
+#### Plot spread N vs. total sample size
++ Plot the fit parameters for the spread best-fit power laws
+
+```{r}
+spread.N.fit.temp <- summary(nlsLM(N.spread ~ (N*total.sites^a) + k,
+      data = spread.pfits,
+      start = list(N = max(spread.pfits$N.spread),
+                   a = unname(coef(lm(log(N.spread) ~ log(total.sites), data=spread.pfits))[2]),
+                   k = 0),
+      control = list(maxiter = 500)))
+
+spread.N.fit.params <- spread.N.fit.temp$coefficients
+
+rm(spread.N.fit.temp)
+
+spread.N.fit.plot <- ggplot(spread.pfits) +
+  geom_point(aes(x=total.sites, y=N.spread), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites, y=N.spread, fill="black"), size=2.5, alpha=0.4) +
+  geom_line(aes(x=total.sites, 
+                y=(spread.N.fit.params[1,1]*total.sites^spread.N.fit.params[2,1]) + spread.N.fit.params[3,1]), 
+            color = "red", size=0.4) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total Sites", y = "SPread N parameter")
+
+#spread.N.fit.plot
+```
+
+
+#### Plot a vs. total sample size
+```{r}
+spread.a.fit.temp <- nlsLM(log(a.spread) ~ b0+b1*(log(total.sites)-c)*H(c-log(total.sites))+b2*(log(total.sites)-c), 
+                        data=spread.pfits,
+                        start = list(b0 = 0,
+                                     b1 = 0.1,
+                                     b2 = 0.1,
+                                     c = 10),
+                        control = list(maxiter = 500))
+
+spread.a.fit.params <- summary(spread.a.fit.temp)$coefficients
+
+rm(spread.a.fit.temp)
+
+spread.a.pred <- spread.pfits %>%
+  dplyr::select(-c(N.spread)) %>%
+  dplyr::mutate(spread.a.pred = case_when(total.sites < 
+                                         exp(spread.a.fit.params[4,1]) ~ 
+                                         exp(spread.a.fit.params[1,1] - 
+                                               spread.a.fit.params[4,1]*spread.a.fit.params[2,1])*
+                                         total.sites^spread.a.fit.params[2,1],
+                                       
+                                       total.sites >= exp(spread.a.fit.params[4,1]) ~
+                                         exp(spread.a.fit.params[1,1] - 
+                                               spread.a.fit.params[4,1]*spread.a.fit.params[3,1])*
+                                         total.sites^spread.a.fit.params[3,1]))
+
+spread.a.fit.plot <- ggplot(spread.pfits) +
+  geom_point(aes(x=total.sites, y=a.spread), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites, y=a.spread, fill="black"), size=2.5, alpha=0.4) +
+  geom_line(data=spread.a.pred,
+            aes(x=total.sites, 
+                y=(spread.a.pred)), 
+            color = "red", size=0.4) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total Sites", y = "SD a parameter")
+
+#spread.a.fit.plot
+```
+
+
+
+#### Accounting for the entire range of spread above the mean
++ Calculate the upper whisker of the spread fit residual distributions
+  + Calculate UW for each dataset size
++ This value helps maximize the the degree of spread accounted for in the models
+  + The spread fits alone only account for the expected degree of spread.
+  + The UW the residual is a constant to be added to the spread fit to account for the spread above the expected value
+
+```{r, message = FALSE, warning = FALSE}
+p.spread.uw <- c(0.25,0.75)
+
+
+spread.pfit.df <- spread.pfit.df %>%
+  group_by(total.sites) %>%
+  mutate_at(vars(residual.value), 
+            map(p.spread.uw, 
+                ~partial(quantile, probs =.x, na.rm = TRUE)) %>%
+              set_names(nm = paste0("resid.",p.spread.uw*100,".quant"))) %>%
+  mutate(spread.resid.uw = resid.75.quant + 3*(resid.75.quant-resid.25.quant))
+```
+
+
+#### Plot the spread residuals for each dataset
+```{r}
+spread.pfit.uw <- spread.pfit.df %>%
+  dplyr::select(total.sites, spread.resid.uw) %>%
+  dplyr::distinct()
+
+
+spread.pfit.resid.plot <- ggplot(spread.pfit.df) +
+  geom_hline(yintercept=0, size=0.5) +
+  geom_point(aes(x=gene.length, y=residual.value), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=gene.length, y=residual.value, fill="black"), size=2.5, alpha=0.4) +
+  facet_wrap(~ total.sites.comma, labeller = labeller(.multi_line = FALSE)) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(breaks = c(0,1,2)) +
+  scale_y_continuous(limits = c(-0.0021,0.0021)) +
+  labs(x = "Gene Length (Mbp)", y = "Residuals")
+
+#spread.pfit.resid.plot
+```
+
+#### Fit the UW of the residuals
++ Fit the UW of the residuals to a single power law
++ Parameters hard to estimate based on other metrics
+  + Function throws singularity errors
+  + Based initial parameters on previous fits of the same data to achieve optimization
+
+```{r}
+resid.uw.fits <- summary(nlsLM(spread.resid.uw ~ (N*total.sites^a) + k,
+      data = spread.pfit.uw,
+      start = list(N = 5,
+                   a = -0.5,
+                   k=-1E-7),
+      control = list(maxiter = 500)))
+
+resid.uw.params <- resid.uw.fits$coefficients
+
+rm(resid.uw.fits)
+
+spread.uw.fits.plot <- ggplot(spread.pfit.uw) +
+  geom_point(aes(x=total.sites, y=spread.resid.uw), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites, y=spread.resid.uw, fill="black"), size=2.5, alpha=0.4) +
+  geom_line(aes(x=total.sites, 
+                y=((resid.uw.params[1,1]*total.sites^resid.uw.params[2,1]) + resid.uw.params[3,1])), 
+            color = "red", size=0.4) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total Sites", y = "Spread Residuals Upper Whisker")
+
+
+#spread.uw.fits.plot
+```
+
+
+#### Define the gene length distributions with the lowest representation in each dataset
++ For each dataset, some fraction of genes will have a minimum integration event of zero.
+  + One would expect this fraction of genes to decrease with increasing dataset sizes.
+  + One would also expect this fraction to extend to longer genes in smaller datasets.
++ Assessment of this value will provide valuable information when defining the lower model boundaries
+  + Plot the gene length distributions with min.int==0
+  + Define the end-point as the extreme upper whisker (3*IQR).
+
+```{r}
+zero.points <- collapsed.genes %>%
+  dplyr::filter(min.int == 0) %>%
+  dplyr::group_by(total.sites) %>%
+   dplyr::summarise_at(vars(gene.length),
+                       list(min = min,
+                            Q1 = ~quantile(., probs = 0.25),
+                            median = median,
+                            Q3 = ~quantile(., probs = 0.75),
+                            max = max)) %>%
+   dplyr::mutate(IQR = Q3-Q1,
+                 uw = Q3+1.5*IQR,
+                 x.uw = Q3+3*IQR)
+   
+```
+
+#### Fit the zero points values
+```{r}
+zero.fit.temp <- summary(nlsLM(x.uw ~ (N*total.sites^a) + k,
+      data = zero.points,
+      start = list(N = max(zero.points$x.uw),
+                   a = unname(coef(lm(log(x.uw) ~ log(total.sites), data=zero.points))[2]),
+                   k = 0),
+      control = list(maxiter = 500)))
+
+zero.fit.params <- zero.fit.temp$coefficients
+
+rm(zero.fit.temp)
+
+zero.points.plot <- ggplot(zero.points) +
+  geom_point(aes(x=total.sites, y=x.uw), color="black", size=2.5, shape=21) +
+  geom_point(aes(x=total.sites, y=x.uw, fill="black"), size=2.5, alpha=0.4) +
+  geom_line(aes(x=total.sites, 
+                y=zero.fit.params[1,1]*total.sites^zero.fit.params[2,1] + zero.fit.params[3,1]), 
+            color = "red", size=0.4) +
+  theme_bw() +
+  theme(#panel.grid.major=element_blank(),
+        #panel.grid.minor=element_blank(),
+        text=element_text(size=10),
+        axis.text=element_text(size=10),
+        axis.title=element_text(size=12),
+        legend.position="none") +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total Sites", y = "")
+
+#zero.points.plot
+```
+
+
+#### Save the RData file
+```{r}
+save.image(file = paste0(frag.directory,"/nasb_fragmentation.RData"), safe = F)
+```
+
+
+#### Save objects relevant to figure construction
++ Remove unneeded objects
+
+```{r}
+rm(list=setdiff(ls(), c("mean.linfits",
+                        "mean.linfit.df",
+                        "sd.pfits",
+                        "sd.pfit.df",
+                        "spread.pfits",
+                        "spread.pfit.df",
+                        "spread.pfit.uw",
+                        "zero.points",
+                        "mean.slope.fit.params",
+                        "slope.pred",
+                        "mean.int.fit.params",
+                        "sd.N.fit.params",
+                        "sd.a.fit.params",
+                        "sd.a.pred",
+                        "spread.N.fit.params",
+                        "spread.a.fit.params",
+                        "spread.a.pred",
+                        "resid.uw.params",
+                        "zero.fit.params")))
+```
+
+#### Add fragmentation method to object names
+```{r}
+names <- ls(all.names=T,envir=globalenv());
+
+for (n in names) { 
+  new <- paste0(n,".nasb"); 
+  assign(new, get(n)); rm(list=n) }
+
+rm("n","names","new")
+```
+
+#### Save new RData file
+```{r}
+save.image(file = paste0("~/Documents/scripts/bioinformatics/int_sites/int_site_analysis/models/model_files",
+                         "/plots_nasb_fragmentation.RData"), safe = F)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
