@@ -43,7 +43,7 @@ library(tidyverse)
 ### Calculating the summary statistics for each random integration site dataset
 #### Import all of the random integration BED files.
 + Import all of the gene annotation matched BED files for each random integration site dataset.
-```{r echo=FALSE}
+```{r echo=FALSE, eval=FALSE}
 temp <- list.files(dataset.directory,
                    pattern="*_matched.bed",
                    full.names = TRUE,
@@ -62,7 +62,14 @@ colnames(genic.int) <- c("chromosome","int.start","int.end","int.strand","gene.n
   + Includes all protein-coding, lincRNA, snoRNA, snRNA, rRNA, Ig variable chain, and TcR genes
 
 ```{r}
-frac.genic.int <- genic.int %>% 
+genic.int.filter <- genic.int %>%
+  dplyr::mutate(gene.length = gene.end-gene.start) %>%
+  dplyr::group_by(total.sites, iteration, chromosome, int.start, int.strand) %>%
+  dplyr::filter(gene.length == max(gene.length)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-c(gene.length))
+  
+frac.genic.int <-  genic.int.filter %>%
   dplyr::group_by(total.sites, iteration) %>%
   dplyr::add_count(iteration, name = "genic.sites") %>%
   dplyr::mutate(genic.frac = genic.sites/total.sites) %>%
@@ -81,7 +88,7 @@ summary.genic.frac <- frac.genic.int %>%
   + Iteration-level summary
 
 ```{r}
-unique.genes <- genic.int %>% 
+unique.genes <- genic.int.filter %>% 
   dplyr::group_by(total.sites, iteration, gene.name) %>%
   dplyr::add_count(gene.name, name = "int.counts") %>%
   dplyr::arrange(gene.name, total.sites) %>%
@@ -91,7 +98,7 @@ unique.genes <- genic.int %>%
   dplyr::mutate(genic.sites = sum(int.counts)) %>%
   dplyr::ungroup() %>%
   dplyr::mutate(frac.int = int.counts/genic.sites,
-                gene.length = (gene.end - gene.start) + 1) %>%
+                gene.length = gene.end - gene.start) %>%
   dplyr::group_by(gene.name, total.sites) %>%
   dplyr::add_count(gene.name, name = "unique.ids") %>%
   dplyr::mutate(no.rep = n.files - unique.ids) %>%
@@ -160,7 +167,7 @@ collapsed.genes <- inner_join(unique.genes,
   + All downstream chunks can be run on a laptop
 
 ```{r, eval=FALSE}
-rm(list=setdiff(ls(), c("collapsed.genes", "scratch.uniq.df", "unique.genes", "summary.genic.frac", 
+rm(list=setdiff(ls(), c("collapsed.genes", "scratch.uniq.df", "unique.genes", "summary.genic.frac", "genic.int.filter",
                         "frac.genic.int", "genic.int", "genic.int.list", "temp", "n.files", "frag.directory")))
 ```
 
@@ -278,7 +285,7 @@ mean.slope.fit.plot <- ggplot(mean.linfits) +
 int.fit.temp <- summary(nlsLM(mean.intercept ~ (N*total.sites^a) + k,
       data = mean.linfits,
       start = list(N = max(mean.linfits$mean.intercept),
-                   a = unname(coef(lm(log(mean.intercept) ~ log(total.sites), data=mean.linfits))[2]),
+                   a = unname(coef(lm(log(mean.intercept+1) ~ log(total.sites), data=mean.linfits))[2]),
                    k = 0),
       control = list(maxiter = 500)))
 
@@ -449,7 +456,7 @@ sd.a.fit.plot <- ggplot(sd.pfits) +
 range.analysis <- unique.genes %>% 
   dplyr::inner_join(., mean.linfits, by = "total.sites") %>%
   dplyr::inner_join(., sd.pfits, by = "total.sites") %>%
-  dplyr::mutate(gene.length = gene.end - gene.start + 1,
+  dplyr::mutate(gene.length = gene.end - gene.start,
                 expected.frac = gene.length*mean.slope + mean.intercept,
                 expected.sd = N.sd*gene.length^a.sd,
                 range.frac = frac.int-expected.frac,
@@ -661,7 +668,7 @@ resid.uw.fits <- summary(nlsLM(spread.resid.uw ~ (N*total.sites^a) + k,
       data = spread.pfit.uw,
       start = list(N = max(spread.pfit.uw$spread.resid.uw),
                    a = unname(coef(lm(log(spread.resid.uw) ~ log(total.sites), data=spread.pfit.uw))[2]),
-                   k=0),
+                   k=1E-5),
       control = list(maxiter = 500)))
 
 resid.uw.params <- resid.uw.fits$coefficients

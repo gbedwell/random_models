@@ -51,7 +51,15 @@ resampled <- data.table::rbindlist(resampled.list)
 colnames(resampled) <- c("chromosome","int.start","int.end","int.strand","gene.name",
                          "gene.start","gene.end","gene.strand","iteration","total.sites")
 
-resampled.unique.genes <- resampled %>% dplyr::group_by(total.sites, iteration, gene.name) %>%
+resampled.filtered <- resampled %>%
+  dplyr::mutate(gene.length = (gene.end-gene.start)+1) %>%
+  dplyr::group_by(total.sites, iteration, chromosome, int.start, int.strand) %>%
+  dplyr::filter(gene.length == max(gene.length)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-c(gene.length))
+
+resampled.unique.genes <- resampled.filtered %>% 
+  dplyr::group_by(total.sites, iteration, gene.name) %>%
   dplyr::add_count(gene.name, name = "int.counts") %>%
   dplyr::arrange(gene.name, total.sites) %>%
   dplyr::distinct(gene.name, .keep_all=TRUE) %>%
