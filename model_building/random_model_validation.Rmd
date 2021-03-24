@@ -52,35 +52,7 @@ resampled <- data.table::rbindlist(resampled.list)
 colnames(resampled) <- c("chromosome","int.start","int.end","int.strand","gene.name",
                          "gene.start","gene.end","gene.strand","iteration","total.sites")
 
-filtered.1to5 <- resampled %>%
-  dplyr::filter(iteration <= 5) %>%
-  dplyr::mutate(gene.length = gene.end - gene.start) %>%
-  dplyr::group_by(total.sites, iteration, chromosome, int.start, int.strand) %>%
-  dplyr::filter(gene.length == max(gene.length)) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(-c(gene.length))
-
-filtered.6to10 <- resampled %>%
-  dplyr::filter(iteration > 5 & iteration <= 10) %>%
-  dplyr::mutate(gene.length = gene.end - gene.start) %>%
-  dplyr::group_by(total.sites, iteration, chromosome, int.start, int.strand) %>%
-  dplyr::filter(gene.length == max(gene.length)) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(-c(gene.length))
-
-filtered.11to15 <- resampled %>%
-  dplyr::filter(iteration > 10 & iteration <= 16) %>%
-  dplyr::mutate(gene.length = gene.end - gene.start) %>%
-  dplyr::group_by(total.sites, iteration, chromosome, int.start, int.strand) %>%
-  dplyr::filter(gene.length == max(gene.length)) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(-c(gene.length))
-
-resampled.filtered <- rbind(filtered.1to5, filtered.6to10, filtered.11to15)
-
-rm(filtered.1to5, filtered.6to10, filtered.11to15)
-
-resampled.unique.genes <- resampled.filtered %>% 
+resampled.unique.genes <- resampled %>% 
   dplyr::group_by(total.sites, iteration, gene.name) %>%
   dplyr::add_count(gene.name, name = "int.counts") %>%
   dplyr::arrange(gene.name, total.sites) %>%
@@ -105,20 +77,6 @@ outliers <- rigrag::random_frag_model(df = resampled.unique.genes) %>%
   dplyr::mutate(total.sites.comma = scales::comma(total.sites),
                 total.sites.comma = forcats::as_factor(total.sites.comma),
                 total.sites.comma = forcats::fct_reorder(total.sites.comma, total.sites))
-
-systematic.lower <-
-    c("AC004702.2","AC007464.1","AGAP8","AL592284.1","ATRNL1","ATRX","C11orf58","CCDC60","CCNB3",
-      "CLCN5","COPG2","CSNK1G1","CTA-481E9.3","CTD-2251F13.1","CTD-2643K12.3","CUX1","ESR2","FHIT",
-      "GALNT9","GRK1","GRM7-AS3","GTF2IRD1","HIP1","HMCN2","HTR2C","HUWE1","IPO11","IQSEC3","JPX","KIF5C",
-      "KIR3DL1","LINC00457","LINC00842","LRRC8D","MAMDC2","MAMLD1","MEGF11","MEMO1","MTM1","NOTCH2",
-      "NUDT3","PALM2","PARG","PDE4DIP","PGM5","PHF16","PLCXD2","PRR4","RAPGEF6","ROS1","RP11-142A5.1",
-      "RP11-256I9.3","RP11-463C8.4","RP11-554D15.3","RP4-669L17.10","RP5-1052I5.2","RP5-964N17.1",
-      "RP6-206I17.1","RPRD2","SHANK2","SMURF2","SPIDR","SRGAP2","TBC1D3H","TM4SF2","TSNAX-DISC1",
-      "TSPEAR","ZNF81")
-
-'%!in%' = Negate('%in%')
-
-#outliers <- outliers %>% dplyr::filter(gene.name %!in% systematic.lower) 
 
 filtered.upper.outliers <-  outliers %>% 
   dplyr::mutate(conditional=case_when(frac.int > upper.limit ~ "YES",
@@ -228,28 +186,6 @@ model_plot(rigrag::random_frag_model(df = resampled.unique.genes) %>%
              dplyr::filter(total.sites == 1000000, iteration == 10) %>%
              dplyr::rename(sample = iteration), 
            output.type="single", write.out = "no")
-```
-
-#### Define systemic lower outliers from random samples
-+ A small number of genes appears to be systematically targeted a levels lower than the bulk population
-+ This population could erroneously sneak into identified RAG lists from bona fide IS samples
-+ Identify this population for all fragmentation methods and output the list of genes.
-+ Incorporate this into the final *_frag_model function in rigrag.
-
-```{r, eval=FALSE}
-systematic.lower.outliers <- rigrag::random_frag_model(df = resampled.unique.genes) %>%
-  dplyr::filter(total.sites == 1000000) %>%
-  dplyr::filter(outlier.type == "LOWER") %>%
-  dplyr::group_by(gene.name) %>%
-  dplyr::summarise(iteration.count = n()) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(gene.name, iteration.count) %>%
-  dplyr::distinct() %>%
-  dplyr::filter(iteration.count >= 10)
-
-write.table(systematic.lower.outliers, 
-            "~/Documents/scripts/bioinformatics/int_sites/int_site_analysis/models/model_files/random_systematic_rags.txt",
-            sep="\t", quote=FALSE, row.names = FALSE, col.names = FALSE)
 ```
 
 
