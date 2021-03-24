@@ -749,7 +749,7 @@ zero.points.plot <- ggplot(zero.points) +
 
 #### Save the RData file
 ```{r}
-save.image(file = paste0(frag.directory,"/mb_fragmentation.RData"), safe = F)
+save.image(file = paste0(frag.directory,"/mb_fragmentation.RData"), compress = TRUE, safe = F)
 ```
 
 
@@ -792,7 +792,7 @@ rm("n","names","new")
 #### Save new RData file
 ```{r}
 save.image(file = paste0("~/Documents/scripts/bioinformatics/int_sites/int_site_analysis/models/model_files",
-                         "/plots_mb_fragmentation.RData"), safe = F)
+                         "/plots_mb_fragmentation.RData"), compress=TRUE, safe = F)
 ```
 
 
