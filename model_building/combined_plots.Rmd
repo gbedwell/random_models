@@ -429,7 +429,7 @@ spread.N.plot <- ggplot(spread.pfits, aes(fill=sample)) +
         axis.title=element_text(size=18),
         legend.position="none") +
   scale_x_continuous(labels = comma) +
-  scale_y_continuous(limits = c(0,12E-6)) +
+  scale_y_continuous(limits = c(0,9E-6)) +
   labs(y = "Spread N Parameter") +
   xlab(expression(paste("Total Sites x ", 10^3)))
 
@@ -469,8 +469,8 @@ spread.a.fit.plot <- ggplot(spread.pfits, aes(fill=sample)) +
         axis.title=element_text(size=18),
         legend.position="none") +
   scale_x_continuous(labels = comma) +
-  scale_y_continuous(limits = c(0.25,0.51),
-                     breaks = seq(0.25,0.5,by=0.05)) +
+  scale_y_continuous(limits = c(0.25,0.55),
+                     breaks = seq(0.25,0.6,by=0.05)) +
   labs(y = "Spread a Parameter") +
   xlab(expression(paste("Total Sites x ", 10^3)))
 
@@ -789,7 +789,7 @@ nasb.outlier.plot <- ggplot(nasb.outliers, aes(x=forcats::as_factor(scales::comm
 
 ##### Plot NASB outlier number
 ```{r}
-n.nasb.outlier.plot <- ggplot(random.outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)),
+n.nasb.outlier.plot <- ggplot(nasb.outliers, aes(x=forcats::as_factor(scales::comma(total.sites/1000, accuracy = 1)),
                                                      y=n.outliers, fill=outlier.type)) + 
   geom_boxplot(aes(fill=outlier.type), width=0.5, size=0.4, outlier.shape = NA, show.legend = FALSE, alpha = 0.6) +
   geom_point(aes(fill=outlier.type), 

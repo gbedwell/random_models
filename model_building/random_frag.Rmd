@@ -62,14 +62,7 @@ colnames(genic.int) <- c("chromosome","int.start","int.end","int.strand","gene.n
   + Includes all protein-coding, lincRNA, snoRNA, snRNA, rRNA, Ig variable chain, and TcR genes
 
 ```{r}
-genic.int.filter <- genic.int %>%
-  dplyr::mutate(gene.length = gene.end-gene.start) %>%
-  dplyr::group_by(total.sites, iteration, chromosome, int.start, int.strand) %>%
-  dplyr::filter(gene.length == max(gene.length)) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(-c(gene.length))
-  
-frac.genic.int <-  genic.int.filter %>%
+frac.genic.int <-  genic.int %>%
   dplyr::group_by(total.sites, iteration) %>%
   dplyr::add_count(iteration, name = "genic.sites") %>%
   dplyr::mutate(genic.frac = genic.sites/total.sites) %>%
@@ -88,7 +81,7 @@ summary.genic.frac <- frac.genic.int %>%
   + Iteration-level summary
 
 ```{r}
-unique.genes <- genic.int.filter %>% 
+unique.genes <- genic.int %>% 
   dplyr::group_by(total.sites, iteration, gene.name) %>%
   dplyr::add_count(gene.name, name = "int.counts") %>%
   dplyr::arrange(gene.name, total.sites) %>%
@@ -755,7 +748,7 @@ zero.points.plot <- ggplot(zero.points) +
 
 #### Save the RData file
 ```{r}
-save.image(file = paste0(frag.directory,"/random_fragmentation.RData"), safe = F)
+save.image(file = paste0(frag.directory,"/random_fragmentation.RData"), compress=TRUE, safe = F)
 ```
 
 
@@ -798,7 +791,7 @@ rm("n","names","new")
 #### Save new RData file
 ```{r}
 save.image(file = paste0("~/Documents/scripts/bioinformatics/int_sites/int_site_analysis/models/model_files",
-                         "/plots_random_fragmentation.RData"), safe = F)
+                         "/plots_random_fragmentation.RData"), compress = TRUE, safe = F)
 ```
 
 

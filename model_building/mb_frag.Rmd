@@ -43,6 +43,7 @@ library(tidyverse)
 ### Calculating the summary statistics for each random integration site dataset
 #### Import all of the random integration BED files.
 + Import all of the gene annotation matched BED files for each random integration site dataset.
+
 ```{r echo=FALSE, eval=FALSE}
 temp <- list.files(dataset.directory,
                    pattern="*_matched.bed",
@@ -62,14 +63,7 @@ colnames(genic.int) <- c("chromosome","int.start","int.end","int.strand","gene.n
   + Includes all protein-coding, lincRNA, snoRNA, snRNA, rRNA, Ig variable chain, and TcR genes
 
 ```{r}
-genic.int.filter <- genic.int %>%
-  dplyr::mutate(gene.length = gene.end-gene.start) %>%
-  dplyr::group_by(total.sites, iteration, chromosome, int.start, int.strand) %>%
-  dplyr::filter(gene.length == max(gene.length)) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(-c(gene.length))
-  
-frac.genic.int <-  genic.int.filter %>%
+frac.genic.int <-  genic.int %>%
   dplyr::group_by(total.sites, iteration) %>%
   dplyr::add_count(iteration, name = "genic.sites") %>%
   dplyr::mutate(genic.frac = genic.sites/total.sites) %>%
@@ -88,7 +82,7 @@ summary.genic.frac <- frac.genic.int %>%
   + Iteration-level summary
 
 ```{r}
-unique.genes <- genic.int.filter %>% 
+unique.genes <- genic.int %>% 
   dplyr::group_by(total.sites, iteration, gene.name) %>%
   dplyr::add_count(gene.name, name = "int.counts") %>%
   dplyr::arrange(gene.name, total.sites) %>%
@@ -668,7 +662,7 @@ resid.uw.fits <- summary(nlsLM(spread.resid.uw ~ (N*total.sites^a) + k,
       data = spread.pfit.uw,
       start = list(N = max(spread.pfit.uw$spread.resid.uw),
                    a = unname(coef(lm(log(spread.resid.uw) ~ log(total.sites), data=spread.pfit.uw))[2]),
-                   k=1E-5),
+                   k=-1E5),
       control = list(maxiter = 500)))
 
 resid.uw.params <- resid.uw.fits$coefficients
